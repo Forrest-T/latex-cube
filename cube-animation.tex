@@ -1,0 +1,133 @@
+\documentclass[dvisvgm]{article}
+\usepackage{tikz, tikz-3dplot}
+\usepackage{animate}
+\usetikzlibrary{3d}
+
+% cube side color definitions
+\newcommand{\cubeColorWhite}{white}
+\newcommand{\cubeColorYellow}{yellow}
+\newcommand{\cubeColorBlue}{blue}
+\newcommand{\cubeColorGreen}{green!75!black}
+\newcommand{\cubeColorRed}{red}
+\newcommand{\cubeColorOrange}{orange}
+
+%  Default Coords (0,0)       Main Coords (70,105)    * Z
+%                                                 +---|-----+
+%  Y ^                                           /         /|
+%    |  X                                       +---------+ |
+%    *--->                                      |         | ---* Y
+% (Z out of screen)                             |         | +
+%                                               |   /     |/
+% X: Blue (pos), Green (neg)                    +--/------+
+% Y: Red (pos), Orange (neg)                    X *
+% Z: Yellow (pos), White (neg)
+%
+% (Z rotation is 105 instead of 15 because positive Y to the right is easier to think about)
+\tdplotsetmaincoords{70}{105}
+
+\newcommand{\drawRotatedLayer}[2]{
+% Syntax: \drawRotatedLayer{ROW}{ANGLE}
+%     +---------+            +---------+    /       +---------+
+%    /   TOP   /|           /         /|   |  Angle |         |
+%   +---------+ |          +---------+ |    \      /+---------+
+%   |         | | SIDE     |  Row 2  | |     +->  +-+---------+
+%   |  FRONT  | +          |  Row 1  | +          |         | +
+%   |         |/           |  Row 0  |/           |         |/
+%   +---------+            +---------+            +---------+
+    \pgfmathsetmacro\myHeight{int(#1)-1.5}
+    \pgfmathsetmacro\myAngle{#2}
+    % With counterclockwise rotation and a main coord z rotation of 15 mod 90, the right side becomes
+    % obscured beyond 15 degrees. To make our lives easier, we constrain the rotation to a range of
+    % [-75,15) degrees, so we only draw the front and right sides, and calculate side colors accordingly
+    \pgfmathsetmacro\myModularAngle{mod(\myAngle+75,90)-75}
+    \pgfmathtruncatemacro\mySide{mod((\myAngle+75)/90,4)}
+    \def\topColor{\cubeColorYellow}
+    \ifcase\mySide% [-75,15) degrees counterclockwise - color visibility doesn't change, blue front and red side
+        \def\sideColor{\cubeColorRed}
+        \def\frontColor{\cubeColorBlue}
+    \or% [15,105) degrees counterclockwise - red rotates to back, orange comes around to front
+        \def\sideColor{\cubeColorBlue}
+        \def\frontColor{\cubeColorOrange}
+    \or% [105,195) degrees counterclockwise - blue rotates to back, green comes around to front
+        \def\sideColor{\cubeColorOrange}
+        \def\frontColor{\cubeColorGreen}
+    \or% [195,285) degrees counterclockwise - orange rotates to back, red comes around to front
+        \def\sideColor{\cubeColorGreen}
+        \def\frontColor{\cubeColorRed}
+    \fi
+    \begin{scope}[tdplot_main_coords]
+        % rotate around Z axis (top, yellow)
+        \tdplotsetrotatedcoords{0}{0}{\myModularAngle}
+        \begin{scope}[tdplot_rotated_coords]
+            \filldraw [canvas is yx plane at z={\myHeight+1}] (-1.5,-1.5) rectangle (1.5,1.5);
+            \filldraw [canvas is yz plane at x=1.5] (-1.5,\myHeight) rectangle (1.5,{\myHeight+1});
+            \filldraw [canvas is xz plane at y=1.5] (-1.5,\myHeight) rectangle (1.5,{\myHeight+1});
+            \pgfmathsetmacro\cornerRadius{0.12}
+            \newcommand{\stickerOffsets}{-1.5,-0.5,0.5}
+            \newcommand{\sticker}{
+                % helper command to draw the unit square with rounded corners
+                (0.5,0) -- ({1-\cornerRadius},0) arc (-90:0:\cornerRadius)   --
+                           (1,{1-\cornerRadius}) arc (0:90:\cornerRadius)    --
+                           (\cornerRadius,1)     arc (90:180:\cornerRadius)  --
+                           (0,\cornerRadius)     arc (180:270:\cornerRadius) -- cycle
+            }
+            % draw front face
+            \foreach \Y in \stickerOffsets{
+                \draw [canvas is yz plane at x=1.5,shift={(\Y,\myHeight)},fill=\frontColor]
+                \sticker;
+            }
+            % draw right face
+            \foreach \X in \stickerOffsets{
+                \draw [canvas is xz plane at y=1.5,shift={(\X,\myHeight)},fill=\sideColor]
+                \sticker;
+            }
+            % draw top face
+            \foreach \X in \stickerOffsets{
+            \foreach \Y in \stickerOffsets{
+                \ifnum#1=2\relax
+                    \foreach \Y in {-1.5,-0.5,0.5}{
+                        \draw [canvas is yx plane at z={\myHeight+1},shift={(\X,\Y)},fill=\topColor]
+                        \sticker;
+                    }
+                \fi
+            }% \Y
+            }% \X
+        \end{scope}
+    \end{scope}
+}
+
+% splitting into 36 frames of 10 degree rotation, since a full 360 frame animation overflows
+% the default memory limit of the latex compiler. See 'fmtutil' on Linux to change mem limits
+\newcommand\degreeInc{10}
+\pgfmathsetmacro\numFrames{int(360/\degreeInc)}
+% memory optimization - write a timeline for 'animate', to reuse non-moving transparencies
+\newwrite\TimelineFile
+\immediate\openout\TimelineFile=timeline.txt
+% animate format is "[*]:[<framerate>]:[<transparencies>][:<JavaScript>]"
+% we only care about <transparencies>, which is a comma-separated list
+% "T[xN]" means draw transparency F on the next N frames (default N=1, special N=0 means ALL)
+% ::0x0,1 means write transparency 0 on ALL frames, and transparency 1 on just this one
+\immediate\write\TimelineFile{::0x0,1}
+\foreach \i in {2,...,\numFrames}{%
+    \immediate\write\TimelineFile{::\i}%
+}
+\immediate\closeout\TimelineFile
+
+\begin{document}
+    \begin{animateinline}[controls,loop,timeline=timeline.txt]{10}
+        % transparency 0 - non-rotating parts of the cube (first two layers)
+        \begin{tikzpicture}[line join=round]
+            \clip (-3,-2.5) rectangle (3,2.5);
+            \drawRotatedLayer{0}{0}
+            \drawRotatedLayer{1}{0}
+        \end{tikzpicture}
+        \newframe
+        % transparencies 1-\numFrames - rotating top layer by \degreeInc degrees each time
+        \multiframe{\numFrames}{iAngle=0+\degreeInc}{%
+            \begin{tikzpicture}[line join=round]
+                \clip (-3,-2.5) rectangle (3,2.5);
+                \drawRotatedLayer{2}{\iAngle}
+            \end{tikzpicture}%
+        }
+    \end{animateinline}
+\end{document}
