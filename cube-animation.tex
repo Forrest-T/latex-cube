@@ -59,39 +59,31 @@
         % rotate around Z axis (top, yellow)
         \tdplotsetrotatedcoords{0}{0}{\myModularAngle}
         \begin{scope}[tdplot_rotated_coords]
+            % first draw shape of row in black
             \filldraw [canvas is yx plane at z={\myHeight+1}] (-1.5,-1.5) rectangle (1.5,1.5);
             \filldraw [canvas is yz plane at x=1.5] (-1.5,\myHeight) rectangle (1.5,{\myHeight+1});
             \filldraw [canvas is xz plane at y=1.5] (-1.5,\myHeight) rectangle (1.5,{\myHeight+1});
-            \pgfmathsetmacro\cornerRadius{0.12}
-            \newcommand{\stickerOffsets}{-1.5,-0.5,0.5}
-            \newcommand{\sticker}{
-                % helper command to draw the unit square with rounded corners
-                (0.5,0) -- ({1-\cornerRadius},0) arc (-90:0:\cornerRadius)   --
-                           (1,{1-\cornerRadius}) arc (0:90:\cornerRadius)    --
-                           (\cornerRadius,1)     arc (90:180:\cornerRadius)  --
-                           (0,\cornerRadius)     arc (180:270:\cornerRadius) -- cycle
-            }
-            % draw front face
-            \foreach \Y in \stickerOffsets{
-                \draw [canvas is yz plane at x=1.5,shift={(\Y,\myHeight)},fill=\frontColor]
-                \sticker;
-            }
-            % draw right face
-            \foreach \X in \stickerOffsets{
-                \draw [canvas is xz plane at y=1.5,shift={(\X,\myHeight)},fill=\sideColor]
-                \sticker;
-            }
-            % draw top face
-            \foreach \X in \stickerOffsets{
-            \foreach \Y in \stickerOffsets{
-                \ifnum#1=2\relax
-                    \foreach \Y in {-1.5,-0.5,0.5}{
-                        \draw [canvas is yx plane at z={\myHeight+1},shift={(\X,\Y)},fill=\topColor]
-                        \sticker;
-                    }
+            % draw colored stickers on top of row
+            \begin{scope}[rounded corners=2.5]
+                \newcommand{\stickerOffsets}{-1.5,-0.5,0.5}
+                \newcommand{\sticker}{(0,0) -- (1,0) -- (1,1) -- (0,1) -- cycle;}
+                % draw front face
+                \foreach \Y in \stickerOffsets{
+                    \draw [canvas is yz plane at x=1.5,shift={(\Y,\myHeight)},fill=\frontColor] \sticker
+                }
+                % draw right face
+                \foreach \X in \stickerOffsets{
+                    \draw [canvas is xz plane at y=1.5,shift={(\X,\myHeight)},fill=\sideColor] \sticker
+                }
+                % draw top face (only for top layer)
+                \ifnum#1=2
+                    \foreach \X in \stickerOffsets{
+                    \foreach \Y in \stickerOffsets{
+                        \draw [canvas is yx plane at z={\myHeight+1},shift={(\X,\Y)},fill=\topColor] \sticker
+                    }% \Y
+                    }% \X
                 \fi
-            }% \Y
-            }% \X
+            \end{scope}
         \end{scope}
     \end{scope}
 }
@@ -99,7 +91,9 @@
 % splitting into 36 frames of 10 degree rotation, since a full 360 frame animation overflows
 % the default memory limit of the latex compiler. See 'fmtutil' on Linux to change mem limits
 \newcommand\degreeInc{10}
+\newcommand\animationTime{4} % animation duration (seconds)
 \pgfmathsetmacro\numFrames{int(360/\degreeInc)}
+\pgfmathsetmacro\animateFps{int(\numFrames/\animationTime)}
 % memory optimization - write a timeline for 'animate', to reuse non-moving transparencies
 \newwrite\TimelineFile
 \immediate\openout\TimelineFile=timeline.txt
@@ -114,7 +108,7 @@
 \immediate\closeout\TimelineFile
 
 \begin{document}
-    \begin{animateinline}[controls,loop,timeline=timeline.txt]{10}
+    \begin{animateinline}[controls,loop,timeline=timeline.txt]{\animateFps}
         % transparency 0 - non-rotating parts of the cube (first two layers)
         \begin{tikzpicture}[line join=round]
             \clip (-3,-2.5) rectangle (3,2.5);
